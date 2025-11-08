@@ -26,7 +26,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-        validated_data.pop('password')
+        validated_data.pop('password_confirm')
         user = User.objects.create_user(**validated_data)
         return user
 
@@ -75,11 +75,16 @@ class UserProfileSerializer(serializers.ModelSerializer):
     read_only_fields = ('id', 'created_at', 'updated_at')
 
     def get_posts_count(self, obj):
-        return obj.posts.count()
+        try:
+            return obj.posts.count()
+        except AttributeError:
+            return 0
 
     def get_comments_count(self, obj):
-        return obj.comments.count()
-
+        try:
+            return obj.comments.count()
+        except AttributeError:
+            return 0
 class UserUpdateSerializer(serializers.ModelSerializer):
 
     class Meta:
