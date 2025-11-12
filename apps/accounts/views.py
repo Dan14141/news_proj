@@ -15,7 +15,7 @@ from .serializers import (
 
 
 # API для регистрации пользователя
-class UserRegistrationAPIView(generics.CreateAPIView):
+class UserRegistrationView(generics.CreateAPIView):
     serializer_class = UserRegistrationSerializer
     # Доступно всем
     permission_classes = [permissions.AllowAny]
@@ -36,7 +36,7 @@ class UserRegistrationAPIView(generics.CreateAPIView):
         }, status=status.HTTP_201_CREATED)
 
 # API для входа в аккаунт
-class UserLoginAPIView(generics.GenericAPIView):
+class UserLoginView(generics.GenericAPIView):
     serializer_class = UserLoginSerializer
     permission_classes = [permissions.AllowAny]
 
@@ -57,7 +57,7 @@ class UserLoginAPIView(generics.GenericAPIView):
         }, status=status.HTTP_200_OK)
 
 # API для просмотра/обновления профиля
-class UserProfileAPIView(generics.RetrieveUpdateAPIView):
+class UserProfileView(generics.RetrieveUpdateAPIView):
     serializer_class = UserProfileSerializer
     # Доступно только для авторизованных
     permission_classes = [permissions.IsAuthenticated]
@@ -72,7 +72,7 @@ class UserProfileAPIView(generics.RetrieveUpdateAPIView):
         return UserProfileSerializer
 
 # API для изменения пароля
-class ChangePasswordAPIView(generics.UpdateAPIView):
+class ChangePasswordView(generics.UpdateAPIView):
     serializer_class = ChangePasswordSerializer
     permission_classes = [permissions.IsAuthenticated]
 

@@ -25,16 +25,22 @@ class PostListSerializer(serializers.ModelSerializer):
     # Определение полей связанных объектов(автора и категории)
     author = serializers.StringRelatedField()
     category = serializers.StringRelatedField()
-
     comments_count = serializers.ReadOnlyField()
+    is_pinned = serializers.ReadOnlyField()
+    pinned_info = serializers.SerializerMethodField()
 
     class Meta:
         model = Post
         fields = ['id', 'title', 'slug','content','image', 'author',
                   'category','status','views_count', 'comments_count',
-                  'created_at', 'updated_at',
+                  'created_at', 'updated_at','is_pinned', 'pinned_info',
                   ]
         read_only_fields = ['slug', 'author', 'views_count']
+
+    # Возвращаем информацию о закреплении
+    def get_pinned_info(self, obj):
+        return obj.get_pinned_info()
+
     # Метод показа публикации в списке (короткая версия)
     def to_representation(self, instance):
         # Преобразование экземпляра публикациий в словарь
@@ -50,12 +56,17 @@ class PostDetailSerializer(serializers.ModelSerializer):
     author_info = serializers.SerializerMethodField()
     category_info = serializers.SerializerMethodField()
     comments_count = serializers.ReadOnlyField()
+    is_pinned = serializers.ReadOnlyField()
+    pinned_info = serializers.SerializerMethodField()
+    can_pin = serializers.SerializerMethodField()
 
     class Meta:
         model = Post
-        fields = ['id', 'title', 'slug','content','image', 'author','author_info',
-                  'category','status','views_count', 'comments_count',
-                  'created_at', 'updated_at', 'category_info',
+        fields = ['id', 'title', 'slug','content','image', 'author',
+                  'author_info','category','status','views_count',
+                  'comments_count', 'created_at', 'updated_at',
+                  'category_info', 'is_pinned', 'pinned_info',
+                  'can_pin'
                   ]
     read_only_fields = ['slug', 'author', 'views_count']
 
@@ -80,6 +91,16 @@ class PostDetailSerializer(serializers.ModelSerializer):
             }
         else:
             return None
+
+    def get_pinned_info(self, obj):
+        return obj.get_pinned_info()
+
+    # Проверяем, может ли текущий пользователь закрпить пост
+    def get_can_pin(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return False
+        return obj.can_be_pinned_by(request.user)
 
 # Сериализатор для создания/ изменения публикаций
 class PostCreateUpdateSerializer(serializers.ModelSerializer):

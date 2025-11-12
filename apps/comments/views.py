@@ -16,7 +16,7 @@ from apps.posts.permissions import IsAuthorOrReadOnly
 from apps.posts.models import Post
 
 # API для создания постов и просмотра их
-class CommentListCreateApiView(generics.ListCreateAPIView):
+class CommentListCreateView(generics.ListCreateAPIView):
     permission_classes = (permissions.IsAuthenticatedOrReadOnly,)
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filter_fields = ['post', 'author', 'parent']
@@ -34,7 +34,7 @@ class CommentListCreateApiView(generics.ListCreateAPIView):
         return CommentSerializer
 
 # API для просмотра конкретного комментария
-class CommentDetailApiView(generics.RetrieveUpdateDestroyAPIView):
+class CommentDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Comment.objects.filter(is_active=True).select_related('author', 'post')
     serializer_class = CommentDetailSerializer
     permissions_classes = [IsAuthorOrReadOnly]
@@ -51,7 +51,7 @@ class CommentDetailApiView(generics.RetrieveUpdateDestroyAPIView):
         instance.save()
 
 # API для просмотра своих комментариев
-class MyCommentsAPIView(generics.ListAPIView):
+class MyCommentsView(generics.ListAPIView):
     serializer_class = CommentSerializer
     permission_classes = [permissions.IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
