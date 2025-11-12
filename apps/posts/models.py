@@ -2,6 +2,7 @@ from django.db import models
 from django.conf import settings
 from django.utils.text import slugify
 from django.urls import reverse
+from apps.comments.models import Comment
 
 # Модель категории публикации
 class Category(models.Model):
@@ -85,7 +86,7 @@ class Post(models.Model):
     # Подсчёт количества комментариев к публикации
     @property
     def comments_count(self):
-        return Сomment.objects.filter(post=self).count()
+        return Comment.objects.filter(post=self).count()
 
     # Увеличение количества просмотров публикации
     def increment_views_count(self):
