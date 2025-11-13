@@ -1,0 +1,201 @@
+from rest_framework import serializers
+from decimal import Decimal
+from .models import Payment, PaymentAttempt, Refund, WebhookEvent
+
+# Сериализатор для платежей
+class PaymentSerializer(serializers.ModelSerializer):
+    user_info = serializers.SerializerMethodField()
+    subscription_info = serializers.SerializerMethodField()
+    is_successful = serializers.ReadOnlyField()
+    is_pending = serializers.ReadOnlyField()
+    can_be_refunded = serializers.ReadOnlyField()
+
+    class Meta:
+        model = Payment
+        fields = [
+            'id', 'user', 'user_info', 'subscription', 'subscription_info',
+            'amount', 'currency', 'status', 'payment_method', 'description',
+            'is_successful', 'is_pending', 'can_be_refunded',
+            'created_at', 'updated_at', 'processed_at'
+        ]
+        read_only_fields = [
+            'id', 'user', 'status', 'created_at', 'updated_at', 'processed_at'
+        ]
+
+    # Возвращает информацию о пользователе
+    def get_user_info(self, obj):
+        return {
+            'id': obj.user.id,
+            'username': obj.user.username,
+            'email': obj.user.email
+        }
+
+    # Возвращает информацию о подписке
+    def get_subscription_info(self, obj):
+        if obj.subscription:
+            return {
+                'id': obj.subscription.id,
+                'plan_name': obj.subscription.plan.name,
+                'start_date': obj.subscription.start_date,
+                'end_date': obj.subscription.end_date,
+                'status': obj.subscription.status
+            }
+        return None
+
+# Сериализатор для создания платежа
+class PaymentCreateSerializer(serializers.Serializer):
+    subscription_plan_id = serializers.IntegerField()
+    payment_method = serializers.ChoiceField(
+        choices=Payment.PAYMENT_METHOD_CHOICES,
+        default='stripe'
+    )
+    success_url = serializers.URLField(required=False)
+    cancel_url = serializers.URLField(required=False)
+
+    # Валидация тарифного плана
+    def validate_subscription_plan_id(self, value):
+        from apps.sub.models import SubscriptionPlan
+
+        try:
+            plan = SubscriptionPlan.objects.get(id=value, is_active=True)
+        except SubscriptionPlan.DoesNotExist:
+            raise serializers.ValidationError("Subscription plan not found or inactive.")
+
+        return value
+
+    # Общая валидация
+    def validate(self, attrs):
+        user = self.context['request'].user
+
+        # Проверяем, нет ли уже активной подписки
+        if hasattr(user, 'subscription') and user.subscription.is_active:
+            raise serializers.ValidationError({
+                'non_field_errors': ['User already has an active subscription.']
+            })
+
+        # Проверяем, нет ли ожидающих платежей
+        pending_payments = Payment.objects.filter(
+            user=user,
+            status__in=['pending', 'processing']
+        ).exists()
+
+        if pending_payments:
+            raise serializers.ValidationError({
+                'non_field_errors': ['User has pending payments. Please complete or cancel them first.']
+            })
+
+        return attrs
+
+#Сериализатор для попыток платежа
+class PaymentAttemptSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = PaymentAttempt
+        fields = [
+            'id', 'stripe_charge_id', 'status', 'error_message',
+            'metadata', 'created_at'
+        ]
+        read_only_fields = ['id', 'created_at']
+
+#Сериализатор для возвратов
+class RefundSerializer(serializers.ModelSerializer):
+    payment_info = serializers.SerializerMethodField()
+    created_by_info = serializers.SerializerMethodField()
+    is_partial = serializers.ReadOnlyField()
+
+    class Meta:
+        model = Refund
+        fields = [
+            'id', 'payment', 'payment_info', 'amount', 'reason',
+            'status', 'is_partial', 'created_by', 'created_by_info',
+            'created_at', 'processed_at'
+        ]
+        read_only_fields = [
+            'id', 'status', 'created_by', 'created_at', 'processed_at'
+        ]
+
+    # Возвращаем информацию о платеже
+    def get_payment_info(self, obj):
+        return {
+            'id': obj.payment.id,
+            'amount': obj.payment.amount,
+            'currency': obj.payment.currency,
+            'status': obj.payment.status,
+            'user': obj.payment.user.username
+        }
+
+    # Возвращаем информацию о создавшем возврат
+    def get_created_by_info(self, obj):
+        if obj.created_by:
+            return {
+                'id': obj.created_by.id,
+                'username': obj.created_by.username
+            }
+        return None
+
+    # Валидация суммы возврата
+    def validate_amount(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Refund amount must be positive.")
+        return value
+
+    # Общая валидация возврата
+    def validate(self, attrs):
+        payment_id = self.context.get('payment_id')
+        if payment_id:
+            try:
+                payment = Payment.objects.get(id=payment_id)
+            except Payment.DoesNotExist:
+                raise serializers.ValidationError("Payment not found.")
+
+            if not payment.can_be_refunded:
+                raise serializers.ValidationError("This payment cannot be refunded.")
+
+            # Проверяем, что сумма возврата не превышает сумму платежа
+            total_refunded = payment.refunds.filter(
+                status='succeeded'
+            ).aggregate(total=models.Sum('amount'))['total'] or Decimal('0')
+
+            if attrs['amount'] > (payment.amount - total_refunded):
+                raise serializers.ValidationError(
+                    "Refund amount exceeds remaining payment amount."
+                )
+
+        return attrs
+
+# Сериализатор для создания возврата
+class RefundCreateSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Refund
+        fields = ['amount', 'reason']
+
+    # Валидация суммы возврата
+    def validate_amount(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Refund amount must be positive.")
+        return value
+
+# Сериализатор для webhook событий
+class WebhookEventSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = WebhookEvent
+        fields = [
+            'id', 'provider', 'event_id', 'event_type', 'status',
+            'processed_at', 'error_message', 'created_at'
+        ]
+        read_only_fields = ['id', 'created_at']
+
+# Сериализатор для создания Stripe Checkout сессии
+class StripeCheckoutSessionSerializer(serializers.Serializer):
+    checkout_url = serializers.URLField(read_only=True)
+    session_id = serializers.CharField(read_only=True)
+    payment_id = serializers.IntegerField(read_only=True)
+
+# Сериализатор для статуса платежа
+class PaymentStatusSerializer(serializers.Serializer):
+    payment_id = serializers.IntegerField()
+    status = serializers.CharField()
+    message = serializers.CharField()
+    subscription_activated = serializers.BooleanField(default=False)

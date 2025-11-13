@@ -9,6 +9,7 @@ urlpatterns = [
     path('api/v1/posts/', include('apps.posts.urls')),
     path('api/v1/comments/', include('apps.comments.urls')),
     path('api/v1/subcribe/', include('apps.sub.urls')),
+    path('api/v1/payment/', include('apps.payment.urls')),
 ]
 
 if settings.DEBUG:
